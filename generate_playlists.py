@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import urllib3
 from io import BytesIO
 from datetime import datetime
-from urllib.parse import unquote, urlparse, urlunparse
+from urllib.parse import quote, unquote, urlparse, urlunparse
 from bs4 import BeautifulSoup
 
 # Disable the InsecureRequestWarning
@@ -33,6 +33,18 @@ REGION_MAP = {
 }
 
 TOP_REGIONS = ['United States', 'Canada', 'United Kingdom']
+
+# Адреса Cloudflare Worker з папки worker/ (напр. https://best.ваш-логін.workers.dev).
+# Якщо задана — кожне посилання йде через воркер, який лишає тільки найвищу якість.
+# Порожньо — посилання як були (плеєр сам обирає якість).
+BEST_PROXY = os.environ.get('BEST_PROXY', '').strip().rstrip('/')
+
+
+def stream_url(url):
+    """Повертає посилання для плейлиста (через воркер «найвищої якості», якщо він заданий)."""
+    if not BEST_PROXY or not url:
+        return url
+    return f"{BEST_PROXY}/best?u={quote(url, safe='')}"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -158,7 +170,7 @@ def generate_pluto_m3u():
                     group_title,
                     ch['name']
                 ),
-                f"https://jmp2.uk/plu-{ch['original_id']}.m3u8\n"
+                stream_url(f"https://jmp2.uk/plu-{ch['original_id']}.m3u8") + "\n"
             ])
 
         write_m3u_file(f"plutotv_{region}.m3u", "".join(output_lines))
@@ -176,7 +188,7 @@ def generate_plex_m3u():
         for c_id, ch in data['channels'].items():
             if region == 'all' or region in ch.get('regions', []):
                 group = REGION_MAP.get(region.lower(), region.upper()) if region != 'all' else REGION_MAP.get(ch.get('regions', [''])[0].lower(), ch.get('regions', ['Other'])[0].upper())
-                channel_list.append((group, ch['name'].lower(), format_extinf(c_id, c_id, ch.get('chno'), ch['name'], ch.get('logo', ''), group, ch['name']), f"https://epg.provider.plex.tv/library/parts/{c_id}/?X-Plex-Token={token}\n"))
+                channel_list.append((group, ch['name'].lower(), format_extinf(c_id, c_id, ch.get('chno'), ch['name'], ch.get('logo', ''), group, ch['name']), stream_url(f"https://epg.provider.plex.tv/library/parts/{c_id}/?X-Plex-Token={token}") + "\n"))
         if channel_list:
             channel_list.sort(key=lambda x: (0 if x[0] in TOP_REGIONS else 1, x[1]))
             for _, _, extinf, url in channel_list: output_lines.extend([extinf, url])
@@ -231,7 +243,7 @@ def generate_samsungtvplus_m3u():
                     group_title,
                     ch['name']
                 ),
-                f"https://jmp2.uk/{slug_template.replace('{id}', ch['original_id'])}\n"
+                stream_url(f"https://jmp2.uk/{slug_template.replace('{id}', ch['original_id'])}") + "\n"
             ])
 
         write_m3u_file(f"samsungtvplus_{region}.m3u", "".join(output_lines))
@@ -316,7 +328,7 @@ def generate_roku_m3u():
         for c_id, ch in sorted(group_map[group], key=lambda x: x[1].get('name', '').lower()):
             output_lines.extend([
                 format_extinf(c_id, c_id, ch.get('chno'), ch['name'], ch['logo'], group, ch['name']),
-                f"https://jmp2.uk/rok-{c_id}.m3u8\n"
+                stream_url(f"https://jmp2.uk/rok-{c_id}.m3u8") + "\n"
             ])
 
     write_m3u_file("roku_all.m3u", "".join(output_lines))
@@ -394,13 +406,13 @@ def create_m3u_playlist(epg_data, group_mapping):
     seen_urls = set()
     for elem in sorted_epg_data:
         channel_name = elem.get('title', 'Unknown Channel').encode('utf-8', errors='ignore').decode('utf-8')
-        stream_url = unquote(elem['video_resources'][0]['manifest']['url']) if elem.get('video_resources') else ''
-        clean_url = clean_stream_url(stream_url)
+        raw_url = unquote(elem['video_resources'][0]['manifest']['url']) if elem.get('video_resources') else ''
+        clean_url = clean_stream_url(raw_url)
         tvg_id = str(elem.get('content_id', ''))
         logo_url = elem.get('images', {}).get('thumbnail', [None])[0]
         group_title = group_mapping.get(tvg_id, 'Other').encode('utf-8', errors='ignore').decode('utf-8')
         if clean_url and clean_url not in seen_urls:
-            playlist += f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo_url}" group-title="{group_title}",{channel_name}\n{clean_url}\n'
+            playlist += f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo_url}" group-title="{group_title}",{channel_name}\n{stream_url(clean_url)}\n'
             seen_urls.add(clean_url)
     return playlist
 

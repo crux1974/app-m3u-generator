@@ -24,12 +24,12 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -37,10 +37,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # Added urllib3 as it's required by your script's SSL configuration
-          pip install requests beautifulsoup4 lxml urllib3
+          pip install -r requirements.txt
 
       - name: Run Playlist Generation Script
-        run: python generate_playlists.py
+        env:
+          # Адреса воркера «найвищої якості» (Settings → Secrets and variables → Actions → Variables)
+          BEST_PROXY: ${{ vars.BEST_PROXY }}
+        run: |
+          if [ -n "$BEST_PROXY" ]; then echo "Найвища якість: через $BEST_PROXY"; else echo "BEST_PROXY не задано — звичайні посилання"; fi
+          python generate_playlists.py
 
       - name: Fix Tubi EPG URL (The TiviMate Fix)
         run: |

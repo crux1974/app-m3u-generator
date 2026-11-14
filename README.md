@@ -17,6 +17,25 @@ This repository automatically generates M3U playlist files for various free ad-s
 
 ---
 
+## 🎚️ Найвища якість для всіх каналів
+
+Сервіси віддають плейлист з кількома якостями, і плеєр (особливо на LG webOS) часто
+стартує з найнижчої. Воркер з папки `worker/` на льоту лишає **тільки найвищу якість**
+(зі звуком). Через нього йде лише короткий текстовий плейлист — відео плеєр бере напряму.
+
+**Налаштування (один раз, безкоштовно):**
+
+1. Зареєструйтесь на [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** →
+   **Create** → **Create Worker** → назва, напр. `best` → **Deploy**.
+2. **Edit code** → видаліть усе, вставте вміст файлу `worker/best-quality.js` → **Deploy**.
+3. Скопіюйте адресу воркера, напр. `https://best.ваш-логін.workers.dev`.
+4. У цьому репозиторії: **Settings → Secrets and variables → Actions → вкладка Variables →
+   New repository variable**: назва `BEST_PROXY`, значення — адреса з п. 3.
+5. **Actions → Generate M3U Playlists → Run workflow**. Готово: усі плейлисти тепер
+   ведуть через воркер. Щоб повернути як було — видаліть змінну `BEST_PROXY`.
+
+Перевірка: відкрийте в браузері адресу воркера — має бути «OK».
+
 ## ▶️ How It Works
 
 1. **Data Fetching:** A Python script (`generate_playlists.py`) fetches the latest channel data from reliable upstream sources (primarily [i.mjh.nz](https://i.mjh.nz)).
