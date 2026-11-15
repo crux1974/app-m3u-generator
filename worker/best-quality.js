@@ -95,7 +95,38 @@ export function bestQuality(text, base) {
   return [...(header.length ? header : ["#EXTM3U"]), ...keep, inf, best.uri].join("\n") + "\n";
 }
 
+// --- Надійний розклад замість cron GitHub (той часто пропускає запуски) ---
+// Потрібно в налаштуваннях воркера: секрет GH_TOKEN (GitHub fine-grained token,
+// доступ Actions: Read and write до потрібних репозиторіїв) і Cron Trigger «17 * * * *».
+const WORKFLOWS = [
+  // [репозиторій, файл workflow, як часто: кожні N годин]
+  ["crux1974/Rock", "update.yml", 1],
+  ["crux1974/app-m3u-generator", "generate_playlists.yml", 24],
+];
+
+async function dispatchWorkflows(env, scheduledTime) {
+  if (!env.GH_TOKEN) return;
+  const hour = new Date(scheduledTime).getUTCHours();
+  for (const [repo, file, everyHours] of WORKFLOWS) {
+    if (everyHours > 1 && hour % everyHours !== 3) continue; // щодоби — о 03:17 UTC
+    const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${file}/dispatches`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.GH_TOKEN}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "best-quality-worker",
+      },
+      body: JSON.stringify({ ref: "main" }),
+    });
+    console.log(`dispatch ${repo}/${file}: ${r.status}`);
+  }
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(dispatchWorkflows(env, event.scheduledTime));
+  },
+
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/") {
