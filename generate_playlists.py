@@ -40,6 +40,23 @@ TOP_REGIONS = ['United States', 'Canada', 'United Kingdom']
 BEST_PROXY = os.environ.get('BEST_PROXY', '').strip().rstrip('/')
 
 
+def check_best_proxy():
+    """Перевіряє, що воркер справді наш (відповідає «OK»), інакше вимикає його."""
+    global BEST_PROXY
+    if not BEST_PROXY:
+        return
+    try:
+        r = requests.get(BEST_PROXY + '/', timeout=15)
+        if r.ok and r.text.startswith('OK'):
+            logger.info(f"Воркер найвищої якості працює: {BEST_PROXY}")
+            return
+        logger.error(f"Воркер {BEST_PROXY} відповідає не так, як треба ({r.status_code}: {r.text[:40]!r}). "
+                     "Код з worker/best-quality.js не вставлено? Лишаю звичайні посилання.")
+    except Exception as e:
+        logger.error(f"Воркер {BEST_PROXY} недоступний ({e}). Лишаю звичайні посилання.")
+    BEST_PROXY = ''
+
+
 def stream_url(url):
     """Повертає посилання для плейлиста (через воркер «найвищої якості», якщо він заданий)."""
     if not BEST_PROXY or not url:
@@ -466,6 +483,7 @@ def generate_tubi_m3u():
 # --- Execution ---
 
 if __name__ == "__main__":
+    check_best_proxy()
     cleanup_output_dir()
     generate_pluto_m3u()
     generate_plex_m3u()
