@@ -15,6 +15,8 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const ALLOWED = [
   "jmp2.uk", "pluto.tv", "akamaized.net", "roku.com", "plex.tv",
   "tubi.io", "adrise.io", "samsung.com", "amagi.tv", "wurl.com", "wurl.tv",
+  // рок/метал-канали з репозиторію Rock
+  "cloudfront.net", "stingray.com", "broadcasting.ro", "nasatv.com.mk", "vantagetv.ee", "cdni.live",
 ];
 
 function allowed(url) {
