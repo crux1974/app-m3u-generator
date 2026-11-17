@@ -106,22 +106,52 @@ const WORKFLOWS = [
   ["crux1974/app-m3u-generator", "generate_playlists.yml", 24],
 ];
 
+// Ключ для сторінки діагностики /status (щоб сторонні не могли запускати workflow)
+const STATUS_KEY = "6_79tbeAYFJdoD8J";
+
+async function dispatchOne(env, repo, file) {
+  const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${file}/dispatches`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${(env.GH_TOKEN || "").trim()}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "best-quality-worker",
+    },
+    body: JSON.stringify({ ref: "main" }),
+  });
+  const body = r.status === 204 ? "" : (await r.text()).slice(0, 200);
+  const line = `dispatch ${repo}/${file}: ${r.status} ${body}`;
+  (r.status === 204 ? console.log : console.error)(line);
+  return line;
+}
+
 async function dispatchWorkflows(env, scheduledTime) {
-  if (!env.GH_TOKEN) return;
-  const hour = new Date(scheduledTime).getUTCHours();
+  if (!env.GH_TOKEN) { console.error("GH_TOKEN не задано"); return ["GH_TOKEN не задано"]; }
+  const d = new Date(scheduledTime);
+  // Працює з будь-яким розкладом (*/30, 17 * * * * тощо): не частіше разу на годину
+  if (d.getUTCMinutes() >= 30) return [];
+  const hour = d.getUTCHours();
+  const res = [];
   for (const [repo, file, everyHours] of WORKFLOWS) {
-    if (everyHours > 1 && hour % everyHours !== 3) continue; // щодоби — о 03:17 UTC
-    const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${file}/dispatches`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GH_TOKEN}`,
-        Accept: "application/vnd.github+json",
-        "User-Agent": "best-quality-worker",
-      },
-      body: JSON.stringify({ ref: "main" }),
-    });
-    console.log(`dispatch ${repo}/${file}: ${r.status}`);
+    if (everyHours > 1 && hour % everyHours !== 3) continue; // щодоби — о 03:xx UTC
+    res.push(await dispatchOne(env, repo, file));
   }
+  return res;
+}
+
+async function status(env, run) {
+  const t = (env.GH_TOKEN || "").trim();
+  const out = [`GH_TOKEN: ${t ? "є, довжина " + t.length + ", починається на " + t.slice(0, 11) : "НЕМАЄ"}`];
+  if (t) {
+    for (const [repo, file] of WORKFLOWS) {
+      const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${file}`, {
+        headers: { Authorization: `Bearer ${t}`, Accept: "application/vnd.github+json", "User-Agent": "best-quality-worker" },
+      });
+      out.push(`read ${repo}/${file}: ${r.status}`);
+      if (run) out.push(await dispatchOne(env, repo, file));
+    }
+  }
+  return out.join("\n") + "\n";
 }
 
 export default {
@@ -129,8 +159,14 @@ export default {
     ctx.waitUntil(dispatchWorkflows(env, event.scheduledTime));
   },
 
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/status") {
+      if (url.searchParams.get("key") !== STATUS_KEY) return new Response("Forbidden\n", { status: 403 });
+      return new Response(await status(env, url.searchParams.get("run") === "1"), {
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
     if (url.pathname === "/") {
       return new Response("OK. Використання: /best?u=<посилання на m3u8>\n", {
         headers: { "content-type": "text/plain; charset=utf-8" },
