@@ -391,11 +391,16 @@ def fetch_channel_list(proxy, retries=3):
         except: continue
     return []
 
+def _tubi_categories(json_data):
+    # contentIdsByContainer: раніше dict {container: [categories]}, тепер — плаский список категорій
+    c = json_data.get('epg', {}).get('contentIdsByContainer', {}) or {}
+    if isinstance(c, dict):
+        return [cat for lst in c.values() for cat in lst]
+    return list(c)
+
 def create_group_mapping(json_data):
     group_mapping = {}
-    content_ids_by_container = json_data.get('epg', {}).get('contentIdsByContainer', {})
-    for container_list in content_ids_by_container.values():
-        for category in container_list:
+    for category in _tubi_categories(json_data):
             group_name = category.get('name', 'Other')
             for content_id in category.get('contents', []):
                 group_mapping[str(content_id)] = group_name
@@ -467,9 +472,7 @@ def generate_tubi_m3u():
     if not json_data: return
 
     channel_list = []
-    content_ids_by_container = json_data.get('epg', {}).get('contentIdsByContainer', {})
-    for container_list in content_ids_by_container.values():
-        for category in container_list:
+    for category in _tubi_categories(json_data):
             channel_list.extend(category.get('contents', []))
 
     epg_data = fetch_epg_data(channel_list)
